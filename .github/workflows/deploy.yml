@@ -1,59 +1,52 @@
-name: Deploy to EC2
+name: Deploy Next.js App
 
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:  # 👈 allows manual deploys from GitHub UI
+      - main  # or your deployment branch
 
 jobs:
   deploy:
-    name: Push to EC2
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the code
-        uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Deploy files via SSH
-        uses: easingthemes/ssh-deploy@v2.1.5
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          SOURCE: "./"
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
-          REMOTE_USER: ${{ secrets.USERNAME }}
-          TARGET: ${{ secrets.TARGET_DIR }}
-
-      - name: Run setup and build commands on EC2
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.HOST_DNS }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
           script: |
-            # Install Node.js (if not installed)
-            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
-            sudo yum install -y nodejs git
+            # Install Node.js and git (Ubuntu/Debian)
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            sudo apt-get install -y nodejs git
 
-            # Navigate to your app directory (adjust if needed)
-            cd ${{ secrets.TARGET_DIR }}/frontend
+            # Go to your frontend directory
+            cd /path/to/your/frontend || exit 1
 
             # Install dependencies
             npm ci
 
-            # Build project (for production)
+            # Build the Next.js app (adjust if using next export or SSR)
             npm run build
 
-            # Stop Apache (optional, only if you're using it)
-            sudo systemctl stop httpd || true
+            # Stop Apache service
+            sudo systemctl stop apache2 || true
 
-            # Clean existing files
+            # Clean existing web directory
             sudo rm -rf /var/www/html/*
 
-            # Copy Next.js static build (if using next export)
+            # Copy static export output (if using `next export`, outputs to `out`)
             sudo cp -r out/* /var/www/html/
 
-            # Set proper permissions (Apache)
-            sudo chcon -R -t httpd_sys_content_t /var/www/html
-            sudo systemctl start httpd
-            sudo systemctl enable httpd
+            # Set proper permissions (if needed)
+            # On Ubuntu, SELinux usually not enforced, so this might be unnecessary
+            # sudo chown -R www-data:www-data /var/www/html
+
+            # Start and enable Apache
+            sudo systemctl start apache2
+            sudo systemctl enable apache2
