@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:  # 👈 allows manual deploys from GitHub UI
 
 jobs:
   deploy:
@@ -14,7 +15,7 @@ jobs:
       - name: Checkout the code
         uses: actions/checkout@v2
 
-      - name: Deploy to my EC2 instance
+      - name: Deploy files via SSH
         uses: easingthemes/ssh-deploy@v2.1.5
         env:
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
@@ -23,32 +24,36 @@ jobs:
           REMOTE_USER: ${{ secrets.USERNAME }}
           TARGET: ${{ secrets.TARGET_DIR }}
 
-      - name: Executing remote ssh commands using ssh key
+      - name: Run setup and build commands on EC2
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST_DNS }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum -y update
-            sudo yum install -y httpd
+            # Install Node.js (if not installed)
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            sudo yum install -y nodejs git
+
+            # Navigate to your app directory (adjust if needed)
+            cd ${{ secrets.TARGET_DIR }}/frontend
+
+            # Install dependencies
+            npm ci
+
+            # Build project (for production)
+            npm run build
+
+            # Stop Apache (optional, only if you're using it)
+            sudo systemctl stop httpd || true
+
+            # Clean existing files
+            sudo rm -rf /var/www/html/*
+
+            # Copy Next.js static build (if using next export)
+            sudo cp -r out/* /var/www/html/
+
+            # Set proper permissions (Apache)
+            sudo chcon -R -t httpd_sys_content_t /var/www/html
             sudo systemctl start httpd
             sudo systemctl enable httpd
-            # Add Node.js source for latest version
-            curl -sL https://rpm.nodesource.com/setup_14.x | sudo bash -
-            # Install Node.js and npm
-            sudo yum install -y nodejs
-            # Navigate to the project directory
-            cd ${{ secrets.TARGET_DIR }}
-            # Install project dependencies
-            npm install
-            # Build the project
-            npm run build
-            # Clean up existing files in the web server directory
-            sudo rm -rf /var/www/html/*
-            # Move the build files to the web server directory
-            sudo mv build/* /var/www/html
-            # Set proper SELinux context for the web content
-            sudo chcon -R -t httpd_sys_content_t /var/www/html
-            # Restart Apache to apply changes
-            sudo systemctl restart httpd
