@@ -1,52 +1,54 @@
-name: Deploy Next.js App
+name: Deploy to EC2
 
 on:
   push:
     branches:
-      - main  # or your deployment branch
+      - main
 
 jobs:
   deploy:
+    name: Push to EC2
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout the code
+        uses: actions/checkout@v2
 
-      - name: Deploy via SSH
+      - name: Deploy to my EC2 instance
+        uses: easingthemes/ssh-deploy@v2.1.5
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SOURCE: "./"
+          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: ${{ secrets.TARGET_DIR }}
+
+      - name: Executing remote ssh commands using ssh key
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 22
+          host: ${{ secrets.HOST_DNS }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Install Node.js and git (Ubuntu/Debian)
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs git
-
-            # Go to your frontend directory
-            cd /path/to/your/frontend || exit 1
-
-            # Install dependencies
-            npm ci
-
-            # Build the Next.js app (adjust if using next export or SSR)
+            sudo yum -y update
+            sudo yum install -y httpd
+            sudo systemctl start httpd
+            sudo systemctl enable httpd
+            # Add Node.js source for latest version
+            curl -sL https://rpm.nodesource.com/setup_14.x | sudo bash -
+            # Install Node.js and npm
+            sudo yum install -y nodejs
+            # Navigate to the project directory
+            cd ${{ secrets.TARGET_DIR }}
+            # Install project dependencies
+            npm install
+            # Build the project
             npm run build
-
-            # Stop Apache service
-            sudo systemctl stop apache2 || true
-
-            # Clean existing web directory
+            # Clean up existing files in the web server directory
             sudo rm -rf /var/www/html/*
-
-            # Copy static export output (if using `next export`, outputs to `out`)
-            sudo cp -r out/* /var/www/html/
-
-            # Set proper permissions (if needed)
-            # On Ubuntu, SELinux usually not enforced, so this might be unnecessary
-            # sudo chown -R www-data:www-data /var/www/html
-
-            # Start and enable Apache
-            sudo systemctl start apache2
-            sudo systemctl enable apache2
+            # Move the build files to the web server directory
+            sudo mv build/* /var/www/html
+            # Set proper SELinux context for the web content
+            sudo chcon -R -t httpd_sys_content_t /var/www/html
+            # Restart Apache to apply changes
+            sudo systemctl restart httpd
