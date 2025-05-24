@@ -1,12 +1,9 @@
-import React from 'react'
 
-const page = () => {
+
+const Page = () => {
   return (
-    <div>Saurabh web 3 dev is here 
-      <button>Click here bro</button>
-      <span>Click</span>
-    </div>
+    <div>Saurabh web 3 dev is here</div>
   )
 }
 
-export default page
+export default Page
