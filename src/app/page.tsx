@@ -4,6 +4,7 @@ const page = () => {
   return (
     <div>Saurabh web 3 dev is here 
       <button>Click here bro</button>
+      <span>Click</span>
     </div>
   )
 }
