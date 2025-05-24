@@ -4,7 +4,7 @@ name: Deploy to Apache Server
 on:
   push:
     branches:
-      - main  # or 'master' if that's your main branch
+      - main
 
 jobs:
   deploy:
@@ -14,11 +14,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Copy files to Apache server via SSH
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build the app (Turborepo)
+        run: npx turbo run build --filter=web
+
+      - name: Upload to Apache Server via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "path/to/your/build_or_html_files/*"
+          source: "apps/web/out/*"
           target: "/var/www/html/"
