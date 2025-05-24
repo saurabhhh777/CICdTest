@@ -1,43 +1,18 @@
-name: Deploy to EC2
-
+name: Deploy to staging
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  deploy:
-    name: Push and Deploy to EC2
+  redeploy_everything:
     runs-on: ubuntu-latest
-
+    name: Deploying everything to the staging cluster
     steps:
-      - name: Checkout the code
-        uses: actions/checkout@v2
-
-      - name: Deploy to EC2 using SSH
-        uses: easingthemes/ssh-deploy@v2.1.5
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
-          REMOTE_USER: ${{ secrets.USERNAME }}
-          SOURCE: "./"
-          TARGET: ${{ secrets.TARGET_DIR }}
-
-      - name: Run Remote Setup Commands
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST_DNS }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo apt-get update -y
-            sudo apt-get install -y apache2 curl
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            cd ${{ secrets.TARGET_DIR }}
-            npm install
-            npm run build
-            sudo rm -rf /var/www/html/*
-            sudo cp -r build/* /var/www/html/
-            sudo chown -R www-data:www-data /var/www/html
-            sudo systemctl restart apache2
+      - run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" &> ~/ssh_key
+          mkdir -p /home/runner/.ssh
+          ls /home/runner/.ssh
+          touch /home/runner/.ssh/known_hosts
+          echo "${{ secrets.KNOWN_HOSTS }}" &> /home/runner/.ssh/known_hosts
+          chmod 700 /home/runner/ssh_key
+          ssh -i ~/ssh_key root@64.227.147.124 -t "cd week-25-ci-next-app/ && git pull origin main && export PATH=/root/.nvm/versions/node/v22.13.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin && npm install -g pnpm && pnpm install && pnpm run build && pm2 restart fe-sever && pm2 restart http-sever && pm2 restart ws-sever"
