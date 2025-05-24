@@ -1,43 +1,24 @@
-name: Deploy to EC2
+# .github/workflows/deploy.yml
+name: Deploy to Apache Server
 
 on:
   push:
     branches:
-      - main
+      - main  # or 'master' if that's your main branch
 
 jobs:
   deploy:
-    name: Push and Deploy to EC2
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the code
-        uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Deploy to EC2 using SSH
-        uses: easingthemes/ssh-deploy@v2.1.5
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
-          REMOTE_USER: ${{ secrets.USERNAME }}
-          SOURCE: "./"
-          TARGET: ${{ secrets.TARGET_DIR }}
-
-      - name: Run Remote Setup Commands
-        uses: appleboy/ssh-action@master
+      - name: Copy files to Apache server via SSH
+        uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.HOST_DNS }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo apt-get update -y
-            sudo apt-get install -y apache2 curl
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            cd ${{ secrets.TARGET_DIR }}
-            npm install
-            npm run build
-            sudo rm -rf /var/www/html/*
-            sudo cp -r build/* /var/www/html/
-            sudo chown -R www-data:www-data /var/www/html
-            sudo systemctl restart apache2
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "path/to/your/build_or_html_files/*"
+          target: "/var/www/html/"
