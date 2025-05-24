@@ -1,5 +1,4 @@
-# .github/workflows/deploy.yml
-name: Deploy to Apache Server
+name: Deploy
 
 on:
   push:
@@ -7,14 +6,14 @@ on:
       - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
@@ -22,14 +21,27 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build the app (Turborepo)
-        run: npx turbo run build --filter=web
+      - name: Build project
+        run: npm run build
 
-      - name: Upload to Apache Server via SCP
+      - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "apps/web/out/*"
-          target: "/var/www/html/"
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          source: ".next,public,package.json,package-lock.json"
+          target: "/var/www/html/cicd-app"
+
+      - name: SSH Commands
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/html/cicd-app
+            npm install --omit=dev
+            pm2 restart app || pm2 start npm --name "app" -- start
