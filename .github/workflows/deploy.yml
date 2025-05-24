@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    name: Push to EC2 and Deploy
+    name: Push and Deploy to EC2
     runs-on: ubuntu-latest
 
     steps:
@@ -30,16 +30,14 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum -y update
-            sudo yum install -y httpd
-            sudo systemctl start httpd
-            sudo systemctl enable httpd
-            curl -sL https://rpm.nodesource.com/setup_14.x | sudo bash -
-            sudo yum install -y nodejs
+            sudo apt-get update -y
+            sudo apt-get install -y apache2 curl
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            sudo apt-get install -y nodejs
             cd ${{ secrets.TARGET_DIR }}
             npm install
             npm run build
             sudo rm -rf /var/www/html/*
-            sudo mv build/* /var/www/html/
-            sudo chcon -R -t httpd_sys_content_t /var/www/html
-            sudo systemctl restart httpd
+            sudo cp -r build/* /var/www/html/
+            sudo chown -R www-data:www-data /var/www/html
+            sudo systemctl restart apache2
