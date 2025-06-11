@@ -2,75 +2,76 @@ name: Deploy Next.js to EC2
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout repository code
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js (for local actions like linting or pre-build checks)
-        uses: actions/setup-node@v3
+      # 2️⃣ Node.js on the runner (for lint/tests)
+      - name: Setup Node.js (runner)
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20 # Current LTS; adjust if your app needs another
 
+      # 3️⃣ Secure‑copy the project to the EC2 instance
       - name: Copy files to EC2
-        uses: appleboy/scp-action@master
+        uses: appleboy/scp-action@v1.0.0 # ← pinned
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "."
+          source: "!(.git)/**"     # skip the .git folder (requires bash‑glob shell)
           target: "~/nextjs-app"
+          debug: true              # verbose log helps troubleshooting
+          timeout: 5m              # network xfer timeout
+          connect_timeout: 60s     # SSH handshake timeout
 
+      # 4️⃣ SSH in and deploy
       - name: SSH into EC2 and deploy
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.2 # ← pinned
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          # --- IMPORTANT: ADDED TIMEOUT PARAMETERS HERE ---
-          timeout: 300 # Increased timeout to 300 minutes (5 hours). Adjust as needed.
-          connect_timeout: 60 # Increased connection timeout to 60 seconds. Adjust as needed.
+          script_stop: true         # fail action if any cmd exits non‑zero
+          timeout: 5m
+          connect_timeout: 60s
           script: |
-            # --- EC2 Setup and Deployment Script ---
+            set -e  # stop on first error
 
+            # Ensure target directory exists & cd
             mkdir -p ~/nextjs-app
             cd ~/nextjs-app
 
-            rm -rf .next node_modules
+            # Optional clean‑up from previous build
+            rm -rf .next node_modules || true
 
-            if ! command -v node &> /dev/null; then
-              echo "Node.js not found. Installing Node.js 22.x..."
-              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-              sudo apt-get update
+            # Node.js (server‑side) — install 20.x LTS if missing/outdated
+            if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
+              echo "Installing Node.js 20.x…"
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get update -y
               sudo apt-get install -y nodejs
-            else
-              echo "Node.js already installed."
             fi
 
-            if ! command -v pm2 &> /dev/null; then
-              echo "PM2 not found. Installing PM2 globally..."
+            # PM2 (process manager)
+            if ! command -v pm2 >/dev/null; then
               sudo npm install -g pm2
-            else
-              echo "PM2 already installed."
             fi
 
-            echo "Installing project dependencies..."
-            npm install # This is where your previous error occurred due to timeout
+            echo "Installing production dependencies…"
+            npm ci --omit=dev
 
-            echo "Building Next.js application..."
+            echo "Building Next.js…"
             npm run build
 
-            echo "Stopping and deleting old PM2 process (if any)..."
+            echo "Restarting app with PM2…"
             pm2 delete next-app || true
-
-            echo "Starting Next.js application with PM2..."
             pm2 start npm --name "next-app" -- start
-
-            echo "Saving PM2 process list..."
             pm2 save --force
