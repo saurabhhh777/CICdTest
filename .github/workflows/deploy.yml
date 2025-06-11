@@ -2,76 +2,77 @@ name: Deploy Next.js to EC2
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository code
+      # 1️⃣ Checkout the latest code from the repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Node.js on the runner (for lint/tests)
-      - name: Setup Node.js (runner)
+      # 2️⃣ Install Node.js (only used on the GitHub runner if needed)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Current LTS; adjust if your app needs another
+          node-version: 20
 
-      # 3️⃣ Secure‑copy the project to the EC2 instance
+      # 3️⃣ Copy project files to EC2
       - name: Copy files to EC2
-        uses: appleboy/scp-action@v1.0.0 # ← pinned
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "!(.git)/**"     # skip the .git folder (requires bash‑glob shell)
+          source: "./*"
           target: "~/nextjs-app"
-          debug: true              # verbose log helps troubleshooting
-          timeout: 5m              # network xfer timeout
-          connect_timeout: 60s     # SSH handshake timeout
+          debug: true
+          timeout: 5m
 
-      # 4️⃣ SSH in and deploy
+      # 4️⃣ SSH into EC2 and run the deployment script
       - name: SSH into EC2 and deploy
-        uses: appleboy/ssh-action@v1.2.2 # ← pinned
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          script_stop: true         # fail action if any cmd exits non‑zero
           timeout: 5m
-          connect_timeout: 60s
+          script_stop: true
           script: |
-            set -e  # stop on first error
+            set -e
 
-            # Ensure target directory exists & cd
+            echo "📁 Navigating to project directory..."
             mkdir -p ~/nextjs-app
             cd ~/nextjs-app
 
-            # Optional clean‑up from previous build
+            echo "🧹 Cleaning previous build..."
             rm -rf .next node_modules || true
 
-            # Node.js (server‑side) — install 20.x LTS if missing/outdated
+            echo "🟢 Checking Node.js version..."
             if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
-              echo "Installing Node.js 20.x…"
+              echo "Installing Node.js 20.x..."
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              sudo apt-get update -y
+              sudo apt-get update
               sudo apt-get install -y nodejs
             fi
 
-            # PM2 (process manager)
+            echo "🛠 Installing PM2 if not present..."
             if ! command -v pm2 >/dev/null; then
               sudo npm install -g pm2
             fi
 
-            echo "Installing production dependencies…"
+            echo "📦 Installing dependencies..."
             npm ci --omit=dev
 
-            echo "Building Next.js…"
+            echo "🔨 Building the Next.js app..."
             npm run build
 
-            echo "Restarting app with PM2…"
+            echo "♻️ Restarting app using PM2..."
             pm2 delete next-app || true
             pm2 start npm --name "next-app" -- start
             pm2 save --force
+
+            echo "✅ Deployment finished!"
