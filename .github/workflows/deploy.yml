@@ -14,11 +14,9 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Node.js (for local actions like linting or pre-build checks)
-        # This step is for actions that might run locally on the GitHub Actions runner.
-        # The actual Node.js installation for the Next.js app happens on EC2.
         uses: actions/setup-node@v3
         with:
-          node-version: 18 # You can keep this version consistent with your development environment
+          node-version: 18
 
       - name: Copy files to EC2
         uses: appleboy/scp-action@master
@@ -26,8 +24,8 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "." # Copies all files from the root of your repository
-          target: "~/nextjs-app" # Target directory on your EC2 instance
+          source: "."
+          target: "~/nextjs-app"
 
       - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@master
@@ -35,21 +33,17 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          # --- IMPORTANT: ADDED TIMEOUT PARAMETERS HERE ---
+          timeout: 300 # Increased timeout to 300 minutes (5 hours). Adjust as needed.
+          connect_timeout: 60 # Increased connection timeout to 60 seconds. Adjust as needed.
           script: |
             # --- EC2 Setup and Deployment Script ---
 
-            # 1. Navigate to the application directory
-            #    Ensure the directory exists.
             mkdir -p ~/nextjs-app
             cd ~/nextjs-app
 
-            # 2. Clean up previous build artifacts and node_modules
-            #    This ensures a fresh build and prevents conflicts from old installations.
             rm -rf .next node_modules
 
-            # 3. Install Node.js 22.x if not already installed
-            #    This block checks if 'node' command is available before attempting installation,
-            #    making the script idempotent (can be run multiple times without issues).
             if ! command -v node &> /dev/null; then
               echo "Node.js not found. Installing Node.js 22.x..."
               curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -59,8 +53,6 @@ jobs:
               echo "Node.js already installed."
             fi
 
-            # 4. Install PM2 globally if not already installed
-            #    PM2 is a production process manager for Node.js applications.
             if ! command -v pm2 &> /dev/null; then
               echo "PM2 not found. Installing PM2 globally..."
               sudo npm install -g pm2
@@ -68,30 +60,17 @@ jobs:
               echo "PM2 already installed."
             fi
 
-            # 5. Install project dependencies
-            #    'npm install' reads your package.json and installs required packages.
             echo "Installing project dependencies..."
-            npm install
+            npm install # This is where your previous error occurred due to timeout
 
-            # 6. Build the Next.js application for production
-            #    'npm run build' generates the optimized production build in the '.next' directory.
             echo "Building Next.js application..."
             npm run build
 
-            # 7. Stop and delete the old PM2 process (if it exists)
-            #    'pm2 delete next-app || true' ensures the command doesn't fail
-            #    if 'next-app' process doesn't exist, allowing the workflow to continue.
             echo "Stopping and deleting old PM2 process (if any)..."
             pm2 delete next-app || true
 
-            # 8. Start the Next.js application with PM2
-            #    'pm2 start npm --name "next-app" -- start' tells PM2 to run 'npm start'.
-            #    Ensure your package.json has a "start" script, typically "next start".
             echo "Starting Next.js application with PM2..."
             pm2 start npm --name "next-app" -- start
 
-            # 9. Save PM2 process list to ensure applications restart on reboot
-            #    This saves the current PM2 process list, which is then used by
-            #    the PM2 startup script (which you would have set up once on EC2).
             echo "Saving PM2 process list..."
             pm2 save --force
