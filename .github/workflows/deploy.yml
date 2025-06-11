@@ -1,9 +1,9 @@
+# .github/workflows/deploy.yml
 name: Deploy Next.js to EC2
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Node.js (for any local steps)
+      - name: Setup Node.js (runner)
         uses: actions/setup-node@v3
         with:
           node-version: 18
@@ -26,9 +26,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "."
           target: "~/nextjs-app"
-          strip_components: 0
           timeout: 5m
-          command_timeout: 10m
           debug: true
 
       - name: SSH into EC2 and deploy
@@ -41,35 +39,22 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            echo "📁 Navigating to project directory..."
-            mkdir -p ~/nextjs-app
-            cd ~/nextjs-app
-
-            echo "🧹 Cleaning previous build..."
+            cd ~/nextjs-app || mkdir -p ~/nextjs-app && cd ~/nextjs-app
             rm -rf .next node_modules || true
 
-            echo "🟢 Checking Node.js version..."
             if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
-              echo "Installing Node.js 20.x..."
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              sudo apt-get update
+              sudo apt-get update -y
               sudo apt-get install -y nodejs
             fi
 
-            echo "🛠 Installing PM2 if not present..."
             if ! command -v pm2 >/dev/null; then
               sudo npm install -g pm2
             fi
 
-            echo "📦 Installing all dependencies including Tailwind..."
             npm install
-
-            echo "🔨 Building the Next.js app..."
             npm run build
 
-            echo "♻️ Restarting app using PM2..."
             pm2 delete next-app || true
             pm2 start npm --name "next-app" -- start
             pm2 save --force
-
-            echo "✅ Deployment finished!"
