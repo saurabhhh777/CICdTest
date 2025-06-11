@@ -11,12 +11,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js (for any local steps)
+        uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 18
 
       - name: Copy files to EC2
         uses: appleboy/scp-action@v1.0.0
@@ -24,10 +24,12 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "./*"
+          source: "."
           target: "~/nextjs-app"
-          debug: true
+          strip_components: 0
           timeout: 5m
+          command_timeout: 10m
+          debug: true
 
       - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.2.2
@@ -35,10 +37,10 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          timeout: 5m
+          timeout: 10m
+          command_timeout: 20m
           script: |
             set -e
-
             echo "📁 Navigating to project directory..."
             mkdir -p ~/nextjs-app
             cd ~/nextjs-app
