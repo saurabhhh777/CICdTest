@@ -48,9 +48,10 @@ jobs:
 
       - name: Archive built artifacts
         # Built files ko ek compressed tarball mein pack karega.
+        # 'next.config.js' ko hata diya gaya hai, kyunki yeh basic apps mein aksar nahi hota.
         run: |
-          tar -czf hello-nextjs-app.tar.gz .next/ public/ node_modules/ package.json next.config.js # Basic files for a simple app
-          # Agar aapke paas 'src' directory hai, toh use bhi include karein:
+          tar -czf hello-nextjs-app.tar.gz .next/ public/ node_modules/ package.json
+          # Agar aapke paas 'src' directory hai ya 'next.config.js' hai, toh use bhi include karein:
           # tar -czf hello-nextjs-app.tar.gz .next/ public/ node_modules/ package.json next.config.js src/
 
       - name: Copy archived files to EC2
