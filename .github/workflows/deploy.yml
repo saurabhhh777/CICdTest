@@ -78,13 +78,15 @@ jobs:
           script: |
             set -e # Koi bhi command fail hone par script ruk jaayega.
 
-            # Application directory banayega agar nahi hai toh
+            # Pichle application directory ko poora hatayega aur naya banayega
+            echo "Removing existing application directory: ${{ env.NEXTJS_APP_DIR }}..."
+            rm -rf ${{ env.NEXTJS_APP_DIR }} || true # Ensure the entire directory is removed
+            
+            echo "Creating new application directory: ${{ env.NEXTJS_APP_DIR }}..."
             mkdir -p ${{ env.NEXTJS_APP_DIR }}
             cd ${{ env.NEXTJS_APP_DIR }}
 
-            # Pichle build artifacts aur tarball ko hatayega aur naye ko extract karega
-            rm -rf .next/ public/ node_modules/ || true # '|| true' ensures it doesn't fail if directories don't exist
-            rm -f hello-nextjs-app.tar.gz || true # Ensure the tarball itself is removed if it exists as a directory or file
+            echo "Extracting new build from hello-nextjs-app.tar.gz..."
             tar -xzf hello-nextjs-app.tar.gz # Naye build ko extract karega
             rm hello-nextjs-app.tar.gz # Tarball file ko delete karega
 
