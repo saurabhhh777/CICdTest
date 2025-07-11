@@ -36,10 +36,11 @@ jobs:
         # Ensure you have a 'lint' script in your package.json (e.g., "lint": "next lint").
         run: npm run lint || true # '|| true' ensures workflow doesn't fail if linting is not configured or has warnings
 
-      - name: Run tests (optional, but good practice)
-        # Tests run karega. Agar aapke paas tests nahi hain, toh yeh step hata sakte hain.
-        # Ensure you have a 'test' script in your package.json (e.g., "test": "jest").
-        run: npm run test -- --passWithNoTests # '--passWithNoTests' ensures it passes even if no tests exist
+      # - name: Run tests (optional, but good practice)
+      #   # Tests run karega. Agar aapke paas tests nahi hain, toh yeh step hata sakte hain.
+      #   # Ensure you have a 'test' script in your package.json (e.g., "test": "jest").
+      #   # Agar aapko yeh step chalana hai, toh apni package.json mein "test" script add karein.
+      #   run: npm run test -- --passWithNoTests # '--passWithNoTests' ensures it passes even if no tests exist
 
       - name: Build Next.js application (on runner)
         # Production ke liye Next.js app ko build karega.
