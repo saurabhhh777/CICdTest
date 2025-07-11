@@ -116,3 +116,5 @@ jobs:
             pm2 save --force # PM2 process list ko save karega taaki server reboot hone par app automatically restart ho jaaye
 
             echo "Deployment to EC2 completed successfully!"
+
+
