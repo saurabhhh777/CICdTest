@@ -1,35 +1,71 @@
 # .github/workflows/deploy.yml
-name: Deploy Next.js to EC2
+name: Simple Next.js Deploy to EC2
 
+# Yeh workflow 'main' branch par push hone par trigger hoga.
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   deploy:
+    # Job latest Ubuntu runner par chalega.
     runs-on: ubuntu-latest
+
+    # Environment variable for the app directory on EC2.
+    env:
+      NEXTJS_APP_DIR: ~/hello-nextjs-app # EC2 par app ka directory name
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        # Aapke repository ka code runner par laayega.
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js (runner)
-        uses: actions/setup-node@v3
+      - name: Setup Node.js on GitHub Actions runner
+        # Runner par Node.js install karega.
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: '20' # Apne Next.js project ke liye sahi Node.js version choose karein
 
-      - name: Copy files to EC2
+      - name: Install dependencies (on runner)
+        # Project ki dependencies install karega (jaise next, react).
+        run: npm install
+
+      - name: Run ESLint (optional, but good practice)
+        # Code quality check karega. Agar aapne ESLint set nahi kiya hai, toh yeh step hata sakte hain.
+        # Ensure you have a 'lint' script in your package.json (e.g., "lint": "next lint").
+        run: npm run lint || true # '|| true' ensures workflow doesn't fail if linting is not configured or has warnings
+
+      - name: Run tests (optional, but good practice)
+        # Tests run karega. Agar aapke paas tests nahi hain, toh yeh step hata sakte hain.
+        # Ensure you have a 'test' script in your package.json (e.g., "test": "jest").
+        run: npm run test -- --passWithNoTests # '--passWithNoTests' ensures it passes even if no tests exist
+
+      - name: Build Next.js application (on runner)
+        # Production ke liye Next.js app ko build karega.
+        run: npm run build
+
+      - name: Archive built artifacts
+        # Built files ko ek compressed tarball mein pack karega.
+        run: |
+          tar -czf hello-nextjs-app.tar.gz .next/ public/ node_modules/ package.json next.config.js # Basic files for a simple app
+          # Agar aapke paas 'src' directory hai, toh use bhi include karein:
+          # tar -czf hello-nextjs-app.tar.gz .next/ public/ node_modules/ package.json next.config.js src/
+
+      - name: Copy archived files to EC2
+        # Compressed tarball ko EC2 par copy karega.
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "."
-          target: "~/nextjs-app"
+          source: "hello-nextjs-app.tar.gz"
+          target: "${{ env.NEXTJS_APP_DIR }}/hello-nextjs-app.tar.gz"
           timeout: 5m
           debug: true
 
-      - name: SSH into EC2 and deploy
+      - name: SSH into EC2 and deploy application
+        # EC2 par SSH karke app ko setup aur run karega.
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -38,23 +74,43 @@ jobs:
           timeout: 10m
           command_timeout: 20m
           script: |
-            set -e
-            cd ~/nextjs-app || mkdir -p ~/nextjs-app && cd ~/nextjs-app
-            rm -rf .next node_modules || true
+            set -e # Koi bhi command fail hone par script ruk jaayega.
 
+            # Application directory banayega agar nahi hai toh
+            mkdir -p ${{ env.NEXTJS_APP_DIR }}
+            cd ${{ env.NEXTJS_APP_DIR }}
+
+            # Pichle build artifacts ko hatayega aur naye ko extract karega
+            rm -rf .next/ public/ node_modules/ || true # '|| true' ensures it doesn't fail if directories don't exist
+            tar -xzf hello-nextjs-app.tar.gz # Naye build ko extract karega
+            rm hello-nextjs-app.tar.gz # Tarball file ko delete karega
+
+            # --- EC2 Server Setup (Agar zaroorat ho toh hi chalega) ---
+            # Node.js v20 ko check aur install karega agar nahi hai ya purana version hai
             if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
+              echo "Node.js v20 not found or too old. Installing..."
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
               sudo apt-get update -y
               sudo apt-get install -y nodejs
             fi
 
+            # PM2 ko check aur install karega agar nahi hai toh
             if ! command -v pm2 >/dev/null; then
+              echo "PM2 not found. Installing globally..."
               sudo npm install -g pm2
             fi
+            # --- EC2 Server Setup End ---
 
-            npm install
-            npm run build
+            # PM2 se Next.js app ko manage karega
+            echo "Stopping and deleting existing PM2 process 'hello-nextjs-app' if it exists..."
+            pm2 delete hello-nextjs-app || true # Pichle process ko stop aur delete karega
 
-            pm2 delete next-app || true
-            pm2 start npm --name "next-app" -- start
-            pm2 save --force
+            echo "Starting Next.js application with PM2..."
+            # Next.js app ko 'npm start' command se PM2 ke through start karega.
+            # Ensure your package.json has a "start" script (e.g., "start": "next start").
+            pm2 start npm --name "hello-nextjs-app" -- start
+
+            echo "Saving PM2 process list to ensure restart on reboot..."
+            pm2 save --force # PM2 process list ko save karega taaki server reboot hone par app automatically restart ho jaaye
+
+            echo "Deployment to EC2 completed successfully!"
